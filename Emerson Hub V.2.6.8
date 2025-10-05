@@ -1,50 +1,22 @@
--- Emerson Hub V2.6.8 (LocalScript) -- STUDIO EXECUTABLE
--- Diseñado para pruebas EN ROBLOX STUDIO (StarterPlayerScripts).
--- Nota: no contiene soporte ni instrucciones para executors externos.
-
-local RunService = game:GetService("RunService")
-if not RunService:IsStudio() then
-    -- Si quieres forzar pruebas fuera de Studio, coméntalo; por seguridad se recomienda dejarlo.
-    warn("[Emerson V2.6.8] Este script está pensado para ROBLOX STUDIO (modo prueba). Abortando fuera de Studio.")
-    return
+-- Emerson Hub V2.6.8 (LocalScript) -- STUDIO ONLY
+-- Bloque inicial (espera a que el juego cargue y captura LocalPlayer de forma robusta)
+if not game:IsLoaded() then
+    game.Loaded:Wait()
 end
 
--- Services
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
 
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui
-
--- robust wait for PlayerGui
-local function waitPlayerGui(timeout)
-    timeout = timeout or 10
-    local t0 = tick()
-    while (not LocalPlayer or not LocalPlayer.Parent) and tick() - t0 < timeout do
-        task.wait(0.03)
-        LocalPlayer = Players.LocalPlayer
-    end
-    if not LocalPlayer then return nil end
-    local t1 = tick()
-    while not LocalPlayer:FindFirstChild("PlayerGui") and tick() - t1 < timeout do
-        task.wait(0.03)
-    end
-    return LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
-end
-
-PlayerGui = waitPlayerGui(12)
+local LocalPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui", 12)
 if not PlayerGui then
-    warn("[Emerson V2.6.8] No se encontró PlayerGui. Abortando.")
+    warn("[Emerson v2.6.8] PlayerGui no disponible. Ejecuta en Play/Start Player en Studio.")
     return
 end
 
--- destroy previous UIs with same name (safe cleanup)
-if PlayerGui:FindFirstChild("EmersonHub_v2_6_8") then
-    PlayerGui.EmersonHub_v2_6_8:Destroy()
-end
-
--- Notification helper (estilo V2.6.3)
+-- NOTIFICACIÓN (estilo V2.6.3)
 local function LocalShow(msg)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
@@ -55,11 +27,11 @@ local function LocalShow(msg)
     end)
 end
 
--- ===== internal states (no UI) =====
+-- ===== Estados internos (persisten durante la sesión) =====
 local _States = {
     SpeedBoost = false,
     SpeedChoice = 3,      -- 1..5
-    SpeedMultiplier = 2,  -- mapped from SpeedChoice
+    SpeedMultiplier = 2,  -- mapeado
     MultiJump = false,
     Noclip = false
 }
@@ -74,7 +46,7 @@ local function choiceToMultiplier(choice)
     return 3
 end
 
--- ===== UI creation (keeps the look & order you requested) =====
+-- ===== UI CREATION (mantiene apariencia y orden) =====
 local function createUI()
     local gui = Instance.new("ScreenGui")
     gui.Name = "EmersonHub_v2_6_8"
@@ -203,7 +175,7 @@ end
 
 local UI = createUI()
 
--- ===== character binding & reapply logic (robust) =====
+-- ===== character binding & reapply logic (robusto) =====
 local savedPos = nil
 local teleportConn = nil
 
@@ -278,7 +250,7 @@ end
 Players.LocalPlayer.CharacterAdded:Connect(function(c) bindCharacterEnhanced(c) end)
 if Players.LocalPlayer.Character then bindCharacterEnhanced(Players.LocalPlayer.Character) end
 
--- ===== Options (exact labels & order preserved) =====
+-- ===== Options (mismo orden y textos) =====
 UI.CreateOption("Guardar TP 1", function()
     if rootPart and rootPart.CFrame then
         savedPos = rootPart.CFrame
@@ -372,20 +344,28 @@ updateSpeedMenuVisuals()
 
 applyBtn.MouseButton1Click:Connect(function()
     local v = tonumber(inputBox.Text)
-    if not v then UI.ShowMessage("⚠️ Ingresa número 1-5"); return end
+    if not v then
+        UI.ShowMessage("⚠️ Ingresa número 1-5")
+        return
+    end
     v = math.clamp(math.floor(v), 1, 5)
     _States.SpeedChoice = v
     _States.SpeedMultiplier = choiceToMultiplier(v)
     UI.ShowMessage("🔧 Speed set a "..tostring(v).." (x"..tostring(_States.SpeedMultiplier)..")")
-    if _States.SpeedBoost and humanoid then applyStatesToHumanoid(humanoid) end
+    if _States.SpeedBoost and humanoid then
+        applyStatesToHumanoid(humanoid)
+    end
     updateSpeedMenuVisuals()
 end)
 
 onOffBtn.MouseButton1Click:Connect(function()
     _States.SpeedBoost = not _States.SpeedBoost
     _States.SpeedMultiplier = _States.SpeedMultiplier or choiceToMultiplier(_States.SpeedChoice)
-    if _States.SpeedBoost then UI.ShowMessage("🟢 Speed Boost ON (x"..tostring(_States.SpeedMultiplier)..")")
-    else UI.ShowMessage("🔴 Speed Boost OFF") end
+    if _States.SpeedBoost then
+        UI.ShowMessage("🟢 Speed Boost ON (x"..tostring(_States.SpeedMultiplier)..")")
+    else
+        UI.ShowMessage("🔴 Speed Boost OFF")
+    end
     if humanoid then applyStatesToHumanoid(humanoid) end
     updateSpeedMenuVisuals()
 end)
@@ -406,7 +386,10 @@ local function toggleSpeedMenu()
     end
 end
 
-UI.CreateOption("Speed Boost", function() toggleSpeedMenu() end)
+UI.CreateOption("Speed Boost", function()
+    toggleSpeedMenu()
+end)
+
 UI.CreateOption("Noclip", function()
     _States.Noclip = not _States.Noclip
     if _States.Noclip then
@@ -421,7 +404,7 @@ UI.CreateOption("Noclip", function()
     end
 end)
 
--- ===== Multi Jump logic (keeps previous behavior) =====
+-- ===== Multi Jump (mantiene comportamiento) =====
 local holdingJump = false
 local lastHoldPulse = 0
 local holdImpulse = 4.5
@@ -473,6 +456,7 @@ RunService.Heartbeat:Connect(function(dt)
             end)
         end
     end
+
     if _States.Noclip and LocalPlayer.Character then
         for _,pn in pairs({"HumanoidRootPart","Torso","UpperTorso","LowerTorso","Head"}) do
             local p = LocalPlayer.Character:FindFirstChild(pn)
@@ -481,22 +465,11 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- ensure bindCharacterEnhanced is defined (used on respawn)
-function bindCharacterEnhanced(c)
-    if not c then return end
-    -- reuse earlier function body: same logic already declared above; call it
-    -- (the initial bindCharacterEnhanced declared earlier in the file is used via CharacterAdded)
-    -- to avoid duplication, we simply call the one created above by reference if exists.
-    -- NOTE: because of scoping, we ensured bindCharacterEnhanced local exists above; here it's global fallback.
-    -- (In this script we already connected Players.LocalPlayer.CharacterAdded earlier to bindCharacterEnhanced)
-end
-
--- Rebind on respawn (ensures reapply)
+-- Rebind on respawn & initial set
 Players.LocalPlayer.CharacterAdded:Connect(function(c)
     bindCharacterEnhanced(c)
     robustReapply()
 end)
 
--- initial multiplier and message
 _States.SpeedMultiplier = choiceToMultiplier(_States.SpeedChoice)
 UI.ShowMessage("✅ Emerson Hub v2.6.8 (Studio) cargado.")
