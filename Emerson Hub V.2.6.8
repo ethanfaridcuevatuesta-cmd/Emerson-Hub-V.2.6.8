@@ -1,33 +1,33 @@
--- Emerson Hub V2.6.8 (LocalScript) -- STUDIO ONLY
--- Mantiene UI EXACTA de V.2.6.7; cambios únicos:
---  * Speed Boost: menú 1..5 + ON/OFF
---  * Speed Boost persiste tras TP (reapply robusto)
---  * WalkSpeed original preservado / no quedan "lentos"
--- Pegar en StarterPlayer -> StarterPlayerScripts y probar en Studio (Play / Start Server+Player).
+-- Emerson Hub V2.6.8 (LocalScript) -- STUDIO EXECUTABLE
+-- Versión final solicitada: mantiene EXACTAMENTE la UI / panel / orden de opciones de V.2.6.7/V.2.6.8
+-- Cambios permitidos por ti: Speed Boost con menú 1..5 + persistencia tras TP + gestión robusta de WalkSpeed.
+-- Diseñado PARA ROBLOX STUDIO (modo prueba). No se provee soporte para executors externos.
 
+-- Nota: este script detendrá su ejecución fuera de Studio por seguridad.
 local RunService = game:GetService("RunService")
 if not RunService:IsStudio() then
-    warn("[Emerson v2.6.8] Este script está pensado para ROBLOX STUDIO. Abortando fuera de Studio.")
+    warn("[Emerson v2.6.8] Este script está pensado para ROBLOX STUDIO (modo prueba). Abortando fuera de Studio.")
     return
 end
 
+-- ===== Services =====
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
 
 local LocalPlayer = Players.LocalPlayer
 
--- espera robusta por PlayerGui
+-- ===== Helper: esperar PlayerGui robustamente =====
 local function waitPlayerGui(timeout)
     timeout = timeout or 10
     local t0 = tick()
-    while (not LocalPlayer or not LocalPlayer.Parent) and tick()-t0 < timeout do
+    while (not LocalPlayer or not LocalPlayer.Parent) and tick() - t0 < timeout do
         task.wait(0.03)
         LocalPlayer = Players.LocalPlayer
     end
     if not LocalPlayer then return nil end
     local t1 = tick()
-    while not LocalPlayer:FindFirstChild("PlayerGui") and tick()-t1 < timeout do
+    while not LocalPlayer:FindFirstChild("PlayerGui") and tick() - t1 < timeout do
         task.wait(0.03)
     end
     return LocalPlayer and LocalPlayer:FindFirstChild("PlayerGui")
@@ -39,11 +39,15 @@ if not PlayerGui then
     return
 end
 
--- eliminar GUI anterior si existe
-local existing = PlayerGui:FindFirstChild("EmersonHub_v2_6_8")
-if existing then existing:Destroy() end
+-- Limpieza de versiones previas (misma GUI name convention)
+if PlayerGui:FindFirstChild("EmersonHub_v2_6_8") then
+    PlayerGui.EmersonHub_v2_6_8:Destroy()
+end
+if PlayerGui:FindFirstChild("EmersonHub_v2_6_8_old") then
+    PlayerGui.EmersonHub_v2_6_8_old:Destroy()
+end
 
--- función de notificación igual estilo V2.6.3 (SendNotification)
+-- ===== Notificación (estilo V2.6.3) =====
 local function LocalShow(msg)
     pcall(function()
         StarterGui:SetCore("SendNotification", {
@@ -54,7 +58,7 @@ local function LocalShow(msg)
     end)
 end
 
--- Estados globales no visuales (persisten entre teleports / respawns)
+-- ===== Estados (no visual, persistentes durante sesión) =====
 local _States = {
     SpeedBoost = false,
     SpeedChoice = 3,            -- 1..5
@@ -73,7 +77,7 @@ local function choiceToMultiplier(choice)
     return 3
 end
 
--- UI creation (idéntica a V2.6.7 visualmente; nombre distinto para evitar colisión)
+-- ===== UI CREATION (idéntica apariencia a V2.6.7/V2.6.8) =====
 local function createUI()
     local gui = Instance.new("ScreenGui")
     gui.Name = "EmersonHub_v2_6_8"
@@ -130,7 +134,7 @@ local function createUI()
     local layout = Instance.new("UIListLayout", Scroll); layout.Padding = UDim.new(0,8); layout.SortOrder = Enum.SortOrder.LayoutOrder
     local pad = Instance.new("UIPadding", Scroll); pad.PaddingLeft = UDim.new(0,6); pad.PaddingRight = UDim.new(0,6); pad.PaddingTop = UDim.new(0,6)
 
-    -- rainbow driver (actualiza stroke y texto)
+    -- rainbow driver
     local rainbow = {h = 0, col = Color3.fromRGB(255,0,0)}
     task.spawn(function()
         while gui.Parent do
@@ -166,7 +170,7 @@ local function createUI()
         return rect, btn
     end
 
-    -- draggable via titleBar
+    -- draggable
     local dragging, dragStart, startPos
     titleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -202,12 +206,11 @@ end
 
 local UI = createUI()
 
--- variables de personaje / estado
+-- ===== Character binding, states and reapply logic =====
 local savedPos = nil
 local char, humanoid, rootPart
 local teleportConn = nil
 
--- aplicar estados al humanoide (restaurar original y aplicar multiplicador si corresponde)
 local function applyStatesToHumanoid(hum)
     if not hum then return end
     pcall(function()
@@ -220,7 +223,6 @@ local function applyStatesToHumanoid(hum)
         local mult = _States.SpeedMultiplier or choiceToMultiplier(_States.SpeedChoice)
         pcall(function() hum.WalkSpeed = math.max(1, (originalWalkSpeed or 16) * mult) end)
     end
-    -- noclip quick apply
     if _States.Noclip and LocalPlayer.Character then
         for _,p in ipairs(LocalPlayer.Character:GetDescendants()) do
             if p:IsA("BasePart") then pcall(function() p.CanCollide = false end) end
@@ -228,7 +230,6 @@ local function applyStatesToHumanoid(hum)
     end
 end
 
--- reaplicación robusta (se usa tras teleports)
 local function robustReapply()
     for _,d in ipairs({0.02, 0.09, 0.25}) do
         task.delay(d, function()
@@ -245,37 +246,31 @@ local function robustReapply()
     end
 end
 
--- enlazar personaje y detectar teleports (cambio brusco de CFrame)
 local function bindCharacterEnhanced(c)
     if not c then return end
     char = c
     humanoid = c:FindFirstChildOfClass("Humanoid") or c:WaitForChild("Humanoid")
     rootPart = c:FindFirstChild("HumanoidRootPart") or c:WaitForChild("HumanoidRootPart")
 
-    -- guardar originalWalkSpeed solo la primera vez
     pcall(function()
         if humanoid and (not originalWalkSpeed or originalWalkSpeed <= 0) then
             originalWalkSpeed = humanoid.WalkSpeed or 16
         end
     end)
 
-    -- aplicar estados actuales
     applyStatesToHumanoid(humanoid)
 
-    -- desconectar conexión previa si existe
     if teleportConn and teleportConn.Disconnect then
         pcall(function() teleportConn:Disconnect() end)
         teleportConn = nil
     end
 
-    -- conectar detector de CFrame
     if rootPart then
         local last = rootPart.CFrame
         teleportConn = rootPart:GetPropertyChangedSignal("CFrame"):Connect(function()
             local dist = (rootPart.CFrame.p - last.p).magnitude
             last = rootPart.CFrame
             if dist > 6 then
-                -- reaplicar varias veces en pequeños delays
                 robustReapply()
             end
         end)
@@ -285,7 +280,7 @@ end
 Players.LocalPlayer.CharacterAdded:Connect(function(c) bindCharacterEnhanced(c) end)
 if Players.LocalPlayer.Character then bindCharacterEnhanced(Players.LocalPlayer.Character) end
 
--- ========== Opciones (mantener texto / orden exacto) ==========
+-- ===== Options (preserve labels and order exactly) =====
 UI.CreateOption("Guardar TP 1", function()
     if rootPart and rootPart.CFrame then
         savedPos = rootPart.CFrame
@@ -298,7 +293,6 @@ end)
 UI.CreateOption("Ir a TP 1", function()
     if savedPos and rootPart then
         pcall(function() rootPart.CFrame = savedPos end)
-        -- reaplicar estados robustamente para asegurar persistencia del SpeedBoost, etc.
         robustReapply()
         UI.ShowMessage("✅ Teletransportado a TP 1")
     else
@@ -306,18 +300,15 @@ UI.CreateOption("Ir a TP 1", function()
     end
 end)
 
--- ===== Multi Jump toggle (no cambia apariencia) =====
 UI.CreateOption("Multi Jump", function()
     _States.MultiJump = not _States.MultiJump
     if _States.MultiJump then UI.ShowMessage("🟢 Multi Jump activado") else UI.ShowMessage("🔴 Multi Jump desactivado") end
 end)
 
--- ===== Speed Boost: abrir menú (reemplaza toggle directo) =====
--- Creamos el menú pequeño una sola vez
+-- ===== Speed Boost menu (small) =====
 local SpeedMenu = Instance.new("Frame")
 SpeedMenu.Name = "SpeedMenu"
 SpeedMenu.Size = UDim2.new(0, 160, 0, 120)
--- posición tentativa; se ajusta al abrir
 SpeedMenu.Position = UI.Frame.Position + UDim2.new(0, UI.Frame.Size.X.Offset + 8, 0, 0)
 SpeedMenu.AnchorPoint = Vector2.new(0,0)
 SpeedMenu.BackgroundColor3 = Color3.fromRGB(30,30,30)
@@ -419,7 +410,6 @@ local function toggleSpeedMenu()
             if f then
                 local pos = f.AbsolutePosition
                 local size = f.AbsoluteSize
-                -- prefer right if fits, otherwise place below
                 SpeedMenu.Position = UDim2.new(0, pos.X + size.X + 8, 0, pos.Y)
             end
         end)
@@ -430,7 +420,6 @@ UI.CreateOption("Speed Boost", function()
     toggleSpeedMenu()
 end)
 
--- ===== Noclip option (sin cambios visibles) =====
 UI.CreateOption("Noclip", function()
     _States.Noclip = not _States.Noclip
     if _States.Noclip then
@@ -445,7 +434,7 @@ UI.CreateOption("Noclip", function()
     end
 end)
 
--- ===== Jump handling (multi jump + hold) =====
+-- ===== Multi Jump handling (conservado comportamiento) =====
 local holdingJump = false
 local lastHoldPulse = 0
 local holdImpulse = 4.5
@@ -497,7 +486,6 @@ RunService.Heartbeat:Connect(function(dt)
         end
     end
 
-    -- noclip maintenance (safety)
     if _States.Noclip and LocalPlayer.Character then
         for _,pn in pairs({"HumanoidRootPart","Torso","UpperTorso","LowerTorso","Head"}) do
             local p = LocalPlayer.Character:FindFirstChild(pn)
@@ -506,12 +494,11 @@ RunService.Heartbeat:Connect(function(dt)
     end
 end)
 
--- Rebind on respawn (seguridad)
+-- ===== Safety: reapply states on respawn & initial set =====
 Players.LocalPlayer.CharacterAdded:Connect(function(c)
     bindCharacterEnhanced(c)
     robustReapply()
 end)
 
--- Inicial: configurar multiplicador y notificación
 _States.SpeedMultiplier = choiceToMultiplier(_States.SpeedChoice)
-UI.ShowMessage("✅ Emerson Hub v2.6.8 cargado (STUDIO).")
+UI.ShowMessage("✅ Emerson Hub v2.6.8 (STUDIO) cargado.")
